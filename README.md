@@ -1,3 +1,10 @@
+# Media Controls (GNOME 51 fork)
+
+> Fork of [sakithb/media-controls](https://github.com/sakithb/media-controls), which is archived.
+> This fork adds GNOME Shell 51 support: `St.BoxLayout` `vertical`/`set_vertical()` was removed in 51 and is replaced with `orientation`.
+>
+> Install from this fork: clone it, then run `pnpm install && pnpm build` and `gnome-extensions install dist/builds/*.zip --force`. Log out and back in.
+
 ## What does this extension do?
 
 Show controls and information of the currently playing media in the panel.
