@@ -94,9 +94,14 @@ class PanelButton extends PanelMenu.Button {
     menuPlayers;
     /**
      * @private
-     * @type {St.Icon}
+     * @type {St.Widget}
      */
     menuImage;
+    /**
+     * @private
+     * @type {St.Icon}
+     */
+    menuImageIcon;
     /**
      * @private
      * @type {St.BoxLayout}
@@ -477,11 +482,21 @@ class PanelButton extends PanelMenu.Button {
      */
     async addMenuImage() {
         if (this.menuImage == null) {
-            this.menuImage = new St.Icon({
+            // St.Icon always renders a square texture, which squashes non-square art
+            // (e.g. 16:9 YouTube thumbnails). Paint real art as aspect-preserving
+            // content instead and keep an St.Icon child only for icon fallbacks.
+            this.menuImage = new St.Widget({
                 xExpand: false,
                 yExpand: false,
                 xAlign: Clutter.ActorAlign.CENTER,
+                layoutManager: new Clutter.BinLayout(),
+                contentGravity: Clutter.ContentGravity.RESIZE_ASPECT,
             });
+            this.menuImageIcon = new St.Icon({
+                xExpand: true,
+                yExpand: true,
+            });
+            this.menuImage.add_child(this.menuImageIcon);
         }
         let artSet = false;
         let stream = await getImage(this.playerProxy.metadata["mpris:artUrl"]);
@@ -500,7 +515,7 @@ class PanelButton extends PanelMenu.Button {
                 if (info != null) {
                     const path = info.get_attribute_byte_string(Gio.FILE_ATTRIBUTE_THUMBNAIL_PATH);
                     if (path == null) {
-                        this.menuImage.gicon = info.get_icon();
+                        this.menuImageIcon.gicon = info.get_icon();
                     } else {
                         const thumb = Gio.File.new_for_path(path);
                         stream = await getImage(thumb.get_uri());
@@ -515,26 +530,39 @@ class PanelButton extends PanelMenu.Button {
             const pixbuf = await pixbufPromise.catch(errorLog);
             if (pixbuf != null) {
                 const aspectRatio = pixbuf.width / pixbuf.height;
-                const height = width / aspectRatio;
-                const [success, buffer] = pixbuf.save_to_bufferv("png", [], []);
-                if (success) {
-                    const bytes = GLib.Bytes.new(buffer);
-                    const icon = Gio.BytesIcon.new(bytes);
-                    this.menuImage.content = null;
-                    this.menuImage.gicon = icon;
-                    this.menuImage.iconSize = width;
+                const height = Math.round(width / aspectRatio);
+                try {
+                    const context = global.stage.context.get_backend().get_cogl_context();
+                    const content = new St.ImageContent({
+                        preferredWidth: pixbuf.width,
+                        preferredHeight: pixbuf.height,
+                    });
+                    content.set_bytes(
+                        context,
+                        pixbuf.read_pixel_bytes(),
+                        pixbuf.hasAlpha ? Cogl.PixelFormat.RGBA_8888 : Cogl.PixelFormat.RGB_888,
+                        pixbuf.width,
+                        pixbuf.height,
+                        pixbuf.rowstride,
+                    );
+                    this.menuImageIcon.gicon = null;
+                    this.menuImageIcon.visible = false;
+                    this.menuImage.content = content;
                     this.menuImage.width = width;
                     this.menuImage.height = height;
                     artSet = true;
+                } catch (e) {
+                    errorLog(e);
                 }
             }
         }
         if (artSet === false) {
             this.menuImage.content = null;
-            this.menuImage.gicon = Gio.ThemedIcon.new("audio-x-generic-symbolic");
+            this.menuImageIcon.visible = true;
+            this.menuImageIcon.gicon = Gio.ThemedIcon.new("audio-x-generic-symbolic");
+            this.menuImageIcon.iconSize = width;
             this.menuImage.width = width;
             this.menuImage.height = width;
-            this.menuImage.iconSize = width;
         }
         if (this.menuImage.get_parent() == null) {
             this.menuBox.insert_child_above(this.menuImage, this.menuPlayers);
@@ -1197,6 +1225,7 @@ class PanelButton extends PanelMenu.Button {
         this.menuSlider = null;
         this.menuPlayers = null;
         this.menuImage = null;
+        this.menuImageIcon = null;
         this.menuLabels = null;
         this.menuControls = null;
         this.buttonIcon?.destroy();
