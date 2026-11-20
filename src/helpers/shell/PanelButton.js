@@ -1085,6 +1085,13 @@ class PanelButton extends PanelMenu.Button {
      * @returns {void}
      */
     initActions() {
+        // GNOME 50+: PanelMenu.Button toggles the menu from a ClickGesture that
+        // fires on press for every button, before button-press-event (so the
+        // vfunc_event override above no longer blocks it). Disable it so the
+        // configured per-button actions below decide what happens.
+        // @ts-expect-error private shell field
+        this._clickGesture?.set_enabled(false);
+
         this.connect("button-press-event", (_, /** @type {Clutter.Event} */ event) => {
             const button = event.get_button();
 
